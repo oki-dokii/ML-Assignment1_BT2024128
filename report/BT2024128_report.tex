@@ -1,0 +1,176 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=0.72in]{geometry}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[table,dvipsnames]{xcolor}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{microtype}
+\usepackage{enumitem}
+
+\definecolor{navy}{HTML}{1F4E79}
+\definecolor{lightblue}{HTML}{EAF2F8}
+\hypersetup{colorlinks=true,linkcolor=navy,urlcolor=navy}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlength{\emergencystretch}{2em}
+\setlist{nosep,leftmargin=1.3em}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{ML Assignment 1: Polynomial Regression}
+\rhead{BT2024128}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\newcommand{\metric}[1]{\textcolor{navy}{\textbf{#1}}}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Polynomial Regression for Geothermal Systems}\par\vspace{6pt}
+{\large Machine Learning Assignment 1}\par\vspace{10pt}
+\begin{tabular}{rl}
+\textbf{Roll number:} & BT2024128 \\
+\textbf{Problems:} & Steam turbine optimization (var1), thermal reservoir mapping (var2) \\
+\textbf{Primary metrics:} & Mean Squared Error (MSE), coefficient of determination ($R^2$)
+\end{tabular}
+\end{center}
+
+\section*{Abstract}
+Two polynomial regression pipelines were developed for the personalized datasets assigned to roll number BT2024128. Model selection used only the training data. Every non-empty subset of the input features was screened with five-fold cross-validation, together with feasible polynomial degrees up to the limits in the assignment. Polynomial expansion and scaling were performed inside each validation fold to avoid leakage. The selected var1 model uses all six inputs with degree 4, while the selected var2 model uses all three inputs with degree 8. Repeated five-fold cross-validation produced an MSE of 0.7814 and $R^2$ of 0.9273 for var1, and an MSE of 0.2574 and $R^2$ of 0.9938 for var2.
+
+\section{Dataset and task}
+Each problem contains 1,000 training observations and 1,000 test observations. All columns are numeric, all input variables lie between $-1$ and $1$, and no values are missing. The training sets contain the continuous target $y$; the test targets are hidden.
+
+\begin{table}[h]
+\centering
+\rowcolors{2}{lightblue}{white}
+\begin{tabular}{lccc}
+\toprule
+Problem & Training shape & Test shape & Candidate inputs \\
+\midrule
+var1 & $1000 \times 7$ & $1000 \times 6$ & $x_1,\ldots,x_6$ \\
+var2 & $1000 \times 4$ & $1000 \times 3$ & $x_1,x_2,x_3$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The train and test files for each problem were kept separate. Test values were used only after the final configuration had been selected and fitted on the complete corresponding training set.
+
+\section{Polynomial regression pipeline}
+For $p$ selected inputs and maximum degree $d$, the expansion contains every monomial whose total degree is at most $d$. Excluding the constant term, the number of generated terms is
+\[
+N(p,d)=\binom{p+d}{d}-1.
+\]
+The prediction model is linear in these expanded terms:
+\[
+\widehat{y}=\beta_0+\sum_{j=1}^{N(p,d)}\beta_j\phi_j(\mathbf{x}).
+\]
+Each scikit-learn pipeline applied \texttt{PolynomialFeatures}, then \texttt{StandardScaler}, followed by ordinary least-squares \texttt{LinearRegression}. Scaling after expansion reduces the numerical imbalance between polynomial columns. Keeping every operation inside the pipeline ensures that each validation fold estimates its transformations using only that fold's training partition.
+
+\newpage\thispagestyle{fancy}
+\section{Model-selection procedure}
+The following procedure was applied independently to var1 and var2.
+
+\begin{enumerate}
+\item Enumerate every non-empty subset of the available input features.
+\item Evaluate polynomial degrees up to 10 for var1 and 20 for var2.
+\item Exclude configurations producing more than 700 polynomial terms. A five-fold split has 800 fitting observations, so larger expansions are close to or beyond an underdetermined fit.
+\item Measure validation MSE and $R^2$ using shuffled five-fold cross-validation with random seed 42.
+\item Select the configuration with the lowest mean validation MSE, using lower complexity as a tie-breaker.
+\item Re-evaluate the selected configuration using repeated five-fold cross-validation with five repeats.
+\end{enumerate}
+
+This design searches the full assignment degree limits wherever the number of polynomial terms is statistically supportable. It also avoids selecting a model from a single favorable train-validation split.
+
+\subsection{Degree comparison}
+
+\begin{table}[h]
+\centering
+\caption{Five-fold cross-validation near the selected degrees}
+\rowcolors{2}{lightblue}{white}
+\begin{tabular}{lrrrr}
+\toprule
+Problem & Degree & Terms & Mean MSE & Mean $R^2$ \\
+\midrule
+var1 & 3 & 83 & 0.9505 & 0.9116 \\
+var1 & \textbf{4} & \textbf{209} & \textbf{0.7725} & \textbf{0.9278} \\
+var1 & 5 & 461 & 1.0671 & 0.9006 \\
+\midrule
+var2 & 6 & 83 & 0.5981 & 0.9847 \\
+var2 & 7 & 119 & 0.3730 & 0.9907 \\
+var2 & \textbf{8} & \textbf{164} & \textbf{0.2544} & \textbf{0.9936} \\
+var2 & 9 & 219 & 0.2701 & 0.9933 \\
+var2 & 10 & 285 & 0.3323 & 0.9917 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For var1, degree 4 improves substantially over degree 3, whereas degree 5 increases validation error despite lowering the training error. For var2, error decreases steeply through degree 8 and then rises. These U-shaped validation curves provide clear evidence for the chosen degrees.
+
+\section{Feature selection}
+The lowest-error configuration for both datasets retained every assigned input. Removing even one feature degraded validation performance. The best five-feature var1 alternative, using $x_1,x_2,x_3,x_5,x_6$ with degree 3, had MSE 1.8294 compared with 0.7725 for the six-feature degree-4 model. For var2, all lower-dimensional subsets were far behind the three-feature degree-8 model. This indicates that interaction terms across the complete coordinate or operating-variable set are important.
+
+\newpage\thispagestyle{fancy}
+\section{Final validation results}
+
+\begin{table}[h]
+\centering
+\caption{Repeated five-fold validation of the selected models (five repeats)}
+\rowcolors{2}{lightblue}{white}
+\begin{tabular}{lccrrrr}
+\toprule
+Problem & Features & Degree & Terms & MSE & $R^2$ \\
+\midrule
+var1 & $x_1,\ldots,x_6$ & 4 & 209 & $0.7814 \pm 0.1174$ & $0.9273 \pm 0.0134$ \\
+var2 & $x_1,x_2,x_3$ & 8 & 164 & $0.2574 \pm 0.0309$ & $0.9938 \pm 0.0014$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The repeated estimates are close to the original five-fold screening scores, which shows that the choices are not tied to one random split. A separate five-fold out-of-fold prediction run gave the following results.
+
+\begin{table}[h]
+\centering
+\rowcolors{2}{lightblue}{white}
+\begin{tabular}{lrrrr}
+\toprule
+Problem & OOF MSE & OOF $R^2$ & Training MSE & Training $R^2$ \\
+\midrule
+var1 & 0.7725 & 0.9290 & 0.3663 & 0.9663 \\
+var2 & 0.2544 & 0.9941 & 0.1633 & 0.9962 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Diagnostic interpretation}
+For var1, out-of-fold predictions track the identity line well across negative and positive scores. Residuals are centered near zero, with a few larger deviations at extreme responses. The gap between training and validation MSE is expected because 209 coefficients are estimated, but degree 5 widens this gap and performs worse on held-out observations.
+
+For var2, out-of-fold predictions lie very close to the identity line over the full target range, approximately $-30$ to $39$. Residuals remain centered around zero without a strong systematic curve. The degree-8 model therefore captures nearly all observed target variance without the instability seen at higher degrees.
+
+\section{Final training and test inference}
+After selection, each pipeline was refitted on all 1,000 observations from its training dataset. Predictions were generated in the original test-row order. The final output ranges were $-9.1503$ to $16.6606$ for var1 and $-29.6732$ to $38.4291$ for var2. Both submission files contain exactly 1,000 finite predictions in a single column named \texttt{y}, with no exported row index.
+
+\clearpage
+\section{Reproducibility and safeguards}
+\thispagestyle{fancy}
+The implementation provides separate scripts for selection and inference. The selection script writes the full configuration table, repeated-validation metrics, a degree-selection figure, and out-of-fold diagnostic plots. The prediction script validates schemas, rejects missing or nonnumeric values, checks prediction length and finiteness, saves the fitted pipelines, and writes the two submission CSV files.
+
+\begin{itemize}
+\item \textbf{No test leakage:} Neither test inputs nor hidden targets influence feature or degree selection.
+\item \textbf{Pipeline isolation:} Polynomial generation and scaling are refitted inside every validation fold.
+\item \textbf{Reproducible splits:} All shuffled validation procedures use random seed 42.
+\item \textbf{Controlled complexity:} Candidate expansions larger than 700 terms are not fitted against 800-observation training folds.
+\item \textbf{Submission checks:} Output row counts, column name, order, and finite numeric values are verified programmatically.
+\end{itemize}
+
+\section{Limitations}
+The true test targets are hidden, so expected performance is estimated from cross-validation rather than directly measured. Polynomial regression can also become sensitive near the edges of the input domain, particularly for the six-variable var1 model. The supplied train and test inputs share the same bounded range of $[-1,1]$, which limits extrapolation risk, but some test points combine boundary values more frequently than the training data. Predictions at those combinations may extend beyond the observed training-target range.
+
+No regularized or non-polynomial estimator was used because the assignment requires polynomial regression. Ordinary least squares also gave stable validation results at the selected dimensions. If additional labeled data became available, the most useful next check would be a final untouched holdout assessment of the already selected pipelines.
+
+\section{Conclusion}
+Cross-validated feature and degree selection produced two compact, reproducible polynomial models. The degree-4 six-feature var1 model balances improved nonlinear fit against the overfitting observed at degree 5. The degree-8 three-feature var2 model achieves very high explained variance while maintaining low and stable validation error. These pipelines were retrained on all available labeled observations and used to create the final prediction files for BT2024128.
+
+\end{document}
