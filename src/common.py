@@ -4,7 +4,7 @@ from math import comb
 from pathlib import Path
 
 import pandas as pd
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 
@@ -14,8 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data" / ROLL_NUMBER
 
 FINAL_CONFIGS = {
-    "var1": {"features": ("x1", "x2", "x3", "x4", "x5", "x6"), "degree": 4},
-    "var2": {"features": ("x1", "x2", "x3"), "degree": 8},
+    "var1": {"features": ("x1", "x2", "x3", "x4", "x5", "x6"), "degree": 5, "alpha": 10.0},
+    "var2": {"features": ("x1", "x2", "x3"), "degree": 12, "alpha": 1.0},
+}
+
+RIDGE_SEARCH = {
+    "var1": {"degrees": range(3, 7), "alphas": (0.1, 1.0, 3.0, 10.0, 30.0, 100.0)},
+    "var2": {"degrees": range(7, 17), "alphas": (0.01, 0.1, 1.0, 3.0, 10.0)},
 }
 
 EXPECTED_COLUMNS = {
@@ -51,12 +56,19 @@ def load_dataset(problem: str, split: str) -> pd.DataFrame:
     return frame
 
 
-def make_pipeline(degree: int) -> Pipeline:
+def make_pipeline(degree: int, alpha: float = 0.0) -> Pipeline:
+    if alpha < 0:
+        raise ValueError("Ridge alpha must be nonnegative")
+    regressor = (
+        LinearRegression()
+        if alpha == 0
+        else Ridge(alpha=alpha, solver="lsqr", tol=1e-7, max_iter=20000)
+    )
     return Pipeline(
         [
             ("polynomial", PolynomialFeatures(degree=degree, include_bias=False)),
             ("scaler", StandardScaler()),
-            ("regression", LinearRegression()),
+            ("regression", regressor),
         ]
     )
 

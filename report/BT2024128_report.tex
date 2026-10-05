@@ -38,7 +38,7 @@
 \end{center}
 
 \section*{Abstract}
-Two polynomial regression pipelines were developed for the personalized datasets assigned to roll number BT2024128. Model selection used only the training data. Every non-empty subset of the input features was screened with five-fold cross-validation, together with feasible polynomial degrees up to the limits in the assignment. Polynomial expansion and scaling were performed inside each validation fold to avoid leakage. The selected var1 model uses all six inputs with degree 4, while the selected var2 model uses all three inputs with degree 8. Repeated five-fold cross-validation produced an MSE of 0.7814 and $R^2$ of 0.9273 for var1, and an MSE of 0.2574 and $R^2$ of 0.9938 for var2.
+Two polynomial regression models were developed for the personalized datasets assigned to BT2024128. Feature subsets were screened with ordinary least squares (OLS), then polynomial degree and Ridge regularization strength were compared using five-fold cross-validation on the training data. Polynomial expansion and scaling were fitted within each validation fold. The selected var1 model uses all six inputs, degree 5, and Ridge penalty $\alpha=10$; the var2 model uses all three inputs, degree 12, and $\alpha=1$. Repeated five-fold cross-validation produced MSE 0.4378 and $R^2=0.9593$ for var1, and MSE 0.2291 and $R^2=0.9945$ for var2.
 
 \section{Dataset and task}
 Each problem contains 1,000 training observations and 1,000 test observations. All columns are numeric, all input variables lie between $-1$ and $1$, and no values are missing. The training sets contain the continuous target $y$; the test targets are hidden.
@@ -67,50 +67,55 @@ The prediction model is linear in these expanded terms:
 \[
 \widehat{y}=\beta_0+\sum_{j=1}^{N(p,d)}\beta_j\phi_j(\mathbf{x}).
 \]
-Each scikit-learn pipeline applied \texttt{PolynomialFeatures}, then \texttt{StandardScaler}, followed by ordinary least-squares \texttt{LinearRegression}. Scaling after expansion reduces the numerical imbalance between polynomial columns. Keeping every operation inside the pipeline ensures that each validation fold estimates its transformations using only that fold's training partition.
+Each final scikit-learn pipeline applied \texttt{PolynomialFeatures}, then \texttt{StandardScaler}, followed by \texttt{Ridge}. Its coefficients minimize
+\[
+\sum_i\bigl(y_i-\beta_0-\mathbf{z}_i^\top\boldsymbol\beta\bigr)^2
++\alpha\lVert\boldsymbol\beta\rVert_2^2,
+\]
+where $\mathbf{z}_i$ contains the standardized polynomial terms. Ridge shrinks large coefficients and helps control variance when many interaction terms are present. The intercept is not penalized. Keeping polynomial expansion and scaling inside the pipeline prevents preprocessing leakage across validation folds.
 
 \newpage\thispagestyle{fancy}
 \section{Model-selection procedure}
 The following procedure was applied independently to var1 and var2.
 
 \begin{enumerate}
-\item Enumerate every non-empty subset of the available input features.
-\item Evaluate polynomial degrees up to 10 for var1 and 20 for var2.
-\item Exclude configurations producing more than 700 polynomial terms. A five-fold split has 800 fitting observations, so larger expansions are close to or beyond an underdetermined fit.
-\item Measure validation MSE and $R^2$ using shuffled five-fold cross-validation with random seed 42.
-\item Select the configuration with the lowest mean validation MSE, using lower complexity as a tie-breaker.
-\item Re-evaluate the selected configuration using repeated five-fold cross-validation with five repeats.
+\item Screen every non-empty feature subset using OLS polynomial regression. Degrees up to 10 for var1 and 20 for var2 were considered, omitting OLS designs with more than 700 terms against 800 fitting observations per fold.
+\item Keep the full feature sets because they had the lowest OLS validation error by a large margin.
+\item Search Ridge models on these feature sets: degrees 3--6 and $\alpha\in\{0.1,1,3,10,30,100\}$ for var1; degrees 7--16 and $\alpha\in\{0.01,0.1,1,3,10\}$ for var2.
+\item Compare MSE (primary) and $R^2$ (secondary) using shuffled five-fold cross-validation with random seed 42. Choose the lowest mean MSE.
+\item Re-evaluate each chosen configuration using five repeats of five-fold cross-validation.
 \end{enumerate}
 
-This design searches the full assignment degree limits wherever the number of polynomial terms is statistically supportable. It also avoids selecting a model from a single favorable train-validation split.
+Ridge permits more polynomial terms than OLS because the positive penalty stabilizes coefficient estimation. The Ridge search was focused around degrees where the OLS screen showed useful nonlinear structure. The held-out test targets were never used in these decisions.
 
 \subsection{Degree comparison}
 
 \begin{table}[h]
 \centering
-\caption{Five-fold cross-validation near the selected degrees}
+\caption{Five-fold cross-validation of representative configurations}
 \rowcolors{2}{lightblue}{white}
-\begin{tabular}{lrrrr}
+\begin{tabular}{llrrrr}
 \toprule
-Problem & Degree & Terms & Mean MSE & Mean $R^2$ \\
+Problem & Model & Degree & $\alpha$ & Terms & Mean MSE \\
 \midrule
-var1 & 3 & 83 & 0.9505 & 0.9116 \\
-var1 & \textbf{4} & \textbf{209} & \textbf{0.7725} & \textbf{0.9278} \\
-var1 & 5 & 461 & 1.0671 & 0.9006 \\
+var1 & OLS & 4 & 0 & 209 & 0.7725 \\
+var1 & OLS & 5 & 0 & 461 & 1.0671 \\
+var1 & Ridge & 5 & 3 & 461 & 0.4731 \\
+var1 & \textbf{Ridge} & \textbf{5} & \textbf{10} & \textbf{461} & \textbf{0.4265} \\
+var1 & Ridge & 5 & 30 & 461 & 0.4408 \\
 \midrule
-var2 & 6 & 83 & 0.5981 & 0.9847 \\
-var2 & 7 & 119 & 0.3730 & 0.9907 \\
-var2 & \textbf{8} & \textbf{164} & \textbf{0.2544} & \textbf{0.9936} \\
-var2 & 9 & 219 & 0.2701 & 0.9933 \\
-var2 & 10 & 285 & 0.3323 & 0.9917 \\
+var2 & OLS & 8 & 0 & 164 & 0.2544 \\
+var2 & Ridge & 10 & 1 & 285 & 0.2346 \\
+var2 & \textbf{Ridge} & \textbf{12} & \textbf{1} & \textbf{454} & \textbf{0.2268} \\
+var2 & Ridge & 13 & 1 & 559 & 0.2307 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For var1, degree 4 improves substantially over degree 3, whereas degree 5 increases validation error despite lowering the training error. For var2, error decreases steeply through degree 8 and then rises. These U-shaped validation curves provide clear evidence for the chosen degrees.
+For var1, degree 5 OLS overfits, but Ridge at the same degree reduces held-out error sharply. For var2, the best Ridge result occurs at degree 12. Degrees above that did not improve the five-fold MSE. The tested penalty values also show why the selected $\alpha$ values are reasonable rather than arbitrary.
 
 \section{Feature selection}
-The lowest-error configuration for both datasets retained every assigned input. Removing even one feature degraded validation performance. The best five-feature var1 alternative, using $x_1,x_2,x_3,x_5,x_6$ with degree 3, had MSE 1.8294 compared with 0.7725 for the six-feature degree-4 model. For var2, all lower-dimensional subsets were far behind the three-feature degree-8 model. This indicates that interaction terms across the complete coordinate or operating-variable set are important.
+The preliminary OLS screen favored all available inputs for both datasets. The best five-feature var1 alternative ($x_1,x_2,x_3,x_5,x_6$, degree 3) had MSE 1.8294, compared with 0.7725 for the full-feature degree-4 OLS baseline. All lower-dimensional var2 subsets were far behind the full three-feature degree-8 OLS model. Thus Ridge tuning was performed on the full feature sets; interactions across the variables were retained.
 
 \newpage\thispagestyle{fancy}
 \section{Final validation results}
@@ -119,12 +124,12 @@ The lowest-error configuration for both datasets retained every assigned input. 
 \centering
 \caption{Repeated five-fold validation of the selected models (five repeats)}
 \rowcolors{2}{lightblue}{white}
-\begin{tabular}{lccrrrr}
+\begin{tabular}{lccccrr}
 \toprule
-Problem & Features & Degree & Terms & MSE & $R^2$ \\
+Problem & Features & Degree & $\alpha$ & Terms & MSE & $R^2$ \\
 \midrule
-var1 & $x_1,\ldots,x_6$ & 4 & 209 & $0.7814 \pm 0.1174$ & $0.9273 \pm 0.0134$ \\
-var2 & $x_1,x_2,x_3$ & 8 & 164 & $0.2574 \pm 0.0309$ & $0.9938 \pm 0.0014$ \\
+var1 & $x_1,\ldots,x_6$ & 5 & 10 & 461 & $0.4378 \pm 0.0502$ & $0.9593 \pm 0.0063$ \\
+var2 & $x_1,x_2,x_3$ & 12 & 1 & 454 & $0.2291 \pm 0.0251$ & $0.9945 \pm 0.0013$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -138,39 +143,39 @@ The repeated estimates are close to the original five-fold screening scores, whi
 \toprule
 Problem & OOF MSE & OOF $R^2$ & Training MSE & Training $R^2$ \\
 \midrule
-var1 & 0.7725 & 0.9290 & 0.3663 & 0.9663 \\
-var2 & 0.2544 & 0.9941 & 0.1633 & 0.9962 \\
+var1 & 0.4265 & 0.9608 & 0.1602 & 0.9853 \\
+var2 & 0.2268 & 0.9947 & 0.1487 & 0.9965 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Diagnostic interpretation}
-For var1, out-of-fold predictions track the identity line well across negative and positive scores. Residuals are centered near zero, with a few larger deviations at extreme responses. The gap between training and validation MSE is expected because 209 coefficients are estimated, but degree 5 widens this gap and performs worse on held-out observations.
+For var1, out-of-fold predictions track the identity line across negative and positive scores. Residuals are centered near zero, with a few larger deviations at extreme responses. Ridge controls the variance of the 461-term degree-5 expansion; without regularization, its five-fold MSE was 1.0671.
 
-For var2, out-of-fold predictions lie very close to the identity line over the full target range, approximately $-30$ to $39$. Residuals remain centered around zero without a strong systematic curve. The degree-8 model therefore captures nearly all observed target variance without the instability seen at higher degrees.
+For var2, out-of-fold predictions lie close to the identity line over the observed target range, approximately $-30$ to $39$. Residuals remain centered around zero without a strong systematic curve. Degree 12 captures more structure than the earlier degree-8 OLS baseline while Ridge limits unstable coefficients.
 
 \section{Final training and test inference}
-After selection, each pipeline was refitted on all 1,000 observations from its training dataset. Predictions were generated in the original test-row order. The final output ranges were $-9.1503$ to $16.6606$ for var1 and $-29.6732$ to $38.4291$ for var2. Both submission files contain exactly 1,000 finite predictions in a single column named \texttt{y}, with no exported row index.
+After selection, each pipeline was refitted on all 1,000 observations from its training dataset. Predictions were generated in the original test-row order. The final output ranges were $-11.7862$ to $15.1081$ for var1 and $-29.7657$ to $38.7586$ for var2. Both submission files follow the provided sample: exactly 1,000 finite predictions in a single column named \texttt{y}, with no exported row index.
 
 \clearpage
 \section{Reproducibility and safeguards}
 \thispagestyle{fancy}
-The implementation provides separate scripts for selection and inference. The selection script writes the full configuration table, repeated-validation metrics, a degree-selection figure, and out-of-fold diagnostic plots. The prediction script validates schemas, rejects missing or nonnumeric values, checks prediction length and finiteness, saves the fitted pipelines, and writes the two submission CSV files.
+The implementation provides separate scripts for selection and inference. The selection script writes OLS and Ridge search tables, repeated-validation metrics, a degree-selection figure, and out-of-fold diagnostic plots. The prediction script validates schemas, rejects missing or nonnumeric values, checks prediction length and finiteness, saves the fitted pipelines, and writes the two submission CSV files.
 
 \begin{itemize}
 \item \textbf{No test leakage:} Neither test inputs nor hidden targets influence feature or degree selection.
 \item \textbf{Pipeline isolation:} Polynomial generation and scaling are refitted inside every validation fold.
 \item \textbf{Reproducible splits:} All shuffled validation procedures use random seed 42.
-\item \textbf{Controlled complexity:} Candidate expansions larger than 700 terms are not fitted against 800-observation training folds.
+\item \textbf{Complexity control:} OLS screening avoids expansions larger than 700 terms; Ridge allows larger designs with coefficient shrinkage.
 \item \textbf{Submission checks:} Output row counts, column name, order, and finite numeric values are verified programmatically.
 \end{itemize}
 
 \section{Limitations}
 The true test targets are hidden, so expected performance is estimated from cross-validation rather than directly measured. Polynomial regression can also become sensitive near the edges of the input domain, particularly for the six-variable var1 model. The supplied train and test inputs share the same bounded range of $[-1,1]$, which limits extrapolation risk, but some test points combine boundary values more frequently than the training data. Predictions at those combinations may extend beyond the observed training-target range.
 
-No regularized or non-polynomial estimator was used because the assignment requires polynomial regression. Ordinary least squares also gave stable validation results at the selected dimensions. If additional labeled data became available, the most useful next check would be a final untouched holdout assessment of the already selected pipelines.
+Cross-validation is an estimate, not a measurement against the hidden test targets. Because the same training set informed the model search and reported fixed-model validation, the repeated scores may be mildly optimistic. If additional labeled data became available, the most useful next check would be a final untouched holdout assessment.
 
 \section{Conclusion}
-Cross-validated feature and degree selection produced two compact, reproducible polynomial models. The degree-4 six-feature var1 model balances improved nonlinear fit against the overfitting observed at degree 5. The degree-8 three-feature var2 model achieves very high explained variance while maintaining low and stable validation error. These pipelines were retrained on all available labeled observations and used to create the final prediction files for BT2024128.
+Cross-validated selection produced two reproducible polynomial models with Ridge regularization. Degree 5 with $\alpha=10$ gives var1 substantially lower held-out error than the OLS baseline. Degree 12 with $\alpha=1$ provides a smaller but consistent gain for var2. Both pipelines were retrained on all available labeled observations and used to create the final prediction files for BT2024128.
 
 \end{document}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 import os
 
-from common import FINAL_CONFIGS, ROOT, load_dataset, make_pipeline, polynomial_term_count
+from common import FINAL_CONFIGS, RIDGE_SEARCH, ROOT, load_dataset, make_pipeline, polynomial_term_count
 
 os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "tmp" / "matplotlib"))
 
@@ -33,9 +33,10 @@ def evaluate(
     features: tuple[str, ...],
     degree: int,
     cv: KFold | RepeatedKFold,
+    alpha: float = 0.0,
 ) -> dict[str, float | int | str]:
     scores = cross_validate(
-        make_pipeline(degree),
+        make_pipeline(degree, alpha),
         frame.loc[:, list(features)],
         frame["y"],
         cv=cv,
@@ -47,6 +48,8 @@ def evaluate(
         "features": ",".join(features),
         "feature_count": len(features),
         "degree": degree,
+        "alpha": alpha,
+        "estimator": "OLS" if alpha == 0 else "Ridge",
         "polynomial_terms": polynomial_term_count(len(features), degree),
         "cv_mse_mean": float(fold_mse.mean()),
         "cv_mse_std": float(fold_mse.std(ddof=1)),
@@ -74,19 +77,32 @@ def search_problem(
     return pd.DataFrame(rows)
 
 
+def search_ridge(problem: str, frame: pd.DataFrame, cv: KFold) -> pd.DataFrame:
+    features = FINAL_CONFIGS[problem]["features"]
+    grid = RIDGE_SEARCH[problem]
+    rows = []
+    for degree in grid["degrees"]:
+        for alpha in grid["alphas"]:
+            row = evaluate(frame, features, degree, cv, alpha)
+            row["problem"] = problem
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def selected_metrics(
     problem: str,
     frame: pd.DataFrame,
     features: tuple[str, ...],
     degree: int,
+    alpha: float,
 ) -> tuple[dict[str, float | int | str], np.ndarray]:
     repeated_cv = RepeatedKFold(n_splits=5, n_repeats=5, random_state=42)
-    row = evaluate(frame, features, degree, repeated_cv)
+    row = evaluate(frame, features, degree, repeated_cv, alpha)
     row["problem"] = problem
 
     diagnostic_cv = KFold(n_splits=5, shuffle=True, random_state=42)
     oof_predictions = cross_val_predict(
-        make_pipeline(degree),
+        make_pipeline(degree, alpha),
         frame.loc[:, list(features)],
         frame["y"],
         cv=diagnostic_cv,
@@ -95,27 +111,31 @@ def selected_metrics(
     row["oof_mse"] = float(mean_squared_error(frame["y"], oof_predictions))
     row["oof_r2"] = float(r2_score(frame["y"], oof_predictions))
 
-    fitted = make_pipeline(degree).fit(frame.loc[:, list(features)], frame["y"])
+    fitted = make_pipeline(degree, alpha).fit(frame.loc[:, list(features)], frame["y"])
     train_predictions = fitted.predict(frame.loc[:, list(features)])
     row["training_mse"] = float(mean_squared_error(frame["y"], train_predictions))
     row["training_r2"] = float(r2_score(frame["y"], train_predictions))
     return row, oof_predictions
 
 
-def plot_degree_search(search: pd.DataFrame) -> None:
+def plot_degree_search(ols_search: pd.DataFrame, ridge_search: pd.DataFrame) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.1))
     for axis, problem in zip(axes, ("var1", "var2")):
         config = FINAL_CONFIGS[problem]
         feature_label = ",".join(config["features"])
-        values = search.loc[
-            (search["problem"] == problem) & (search["features"] == feature_label)
+        values = ols_search.loc[
+            (ols_search["problem"] == problem) & (ols_search["features"] == feature_label)
         ].sort_values("degree")
-        axis.plot(values["degree"], values["cv_mse_mean"], marker="o", color="#1f5a85")
+        ridge_values = ridge_search.loc[ridge_search["problem"] == problem]
+        ridge_values = ridge_values.sort_values("cv_mse_mean").drop_duplicates("degree").sort_values("degree")
+        axis.plot(values["degree"], values["cv_mse_mean"], marker="o", color="#1f5a85", label="OLS")
+        axis.plot(ridge_values["degree"], ridge_values["cv_mse_mean"], marker="s", color="#317873", label="Best Ridge alpha")
         axis.axvline(config["degree"], color="#b23a48", linestyle="--", linewidth=1.4)
         axis.set_yscale("log")
         axis.set_title(f"{problem}: all assigned features")
         axis.set_xlabel("Polynomial degree")
         axis.set_ylabel("5-fold CV MSE (log scale)")
+        axis.legend(frameon=False, fontsize=8)
         axis.grid(alpha=0.25)
     fig.tight_layout()
     fig.savefig(PLOTS_DIR / "degree_selection.png", dpi=220, bbox_inches="tight")
@@ -173,28 +193,36 @@ def main() -> None:
         20,
         screening_cv,
     )
-    search = pd.concat([var1_search, var2_search], ignore_index=True)
-    search = search.sort_values(
+    ols_search = pd.concat([var1_search, var2_search], ignore_index=True)
+    ols_search = ols_search.sort_values(
         ["problem", "cv_mse_mean", "feature_count", "degree"], ignore_index=True
     )
-    search.to_csv(RESULTS_DIR / "model_selection.csv", index=False)
+    ols_search.to_csv(RESULTS_DIR / "model_selection.csv", index=False)
+
+    ridge_search = pd.concat(
+        [search_ridge(problem, frames[problem], screening_cv) for problem in ("var1", "var2")],
+        ignore_index=True,
+    ).sort_values(["problem", "cv_mse_mean", "degree", "alpha"], ignore_index=True)
+    ridge_search.to_csv(RESULTS_DIR / "ridge_selection.csv", index=False)
 
     metric_rows = []
     oof_predictions = {}
     for problem, config in FINAL_CONFIGS.items():
         row, predictions = selected_metrics(
-            problem, frames[problem], config["features"], config["degree"]
+            problem, frames[problem], config["features"], config["degree"], config["alpha"]
         )
         metric_rows.append(row)
         oof_predictions[problem] = predictions
     metrics = pd.DataFrame(metric_rows).sort_values("problem")
     metrics.to_csv(RESULTS_DIR / "final_metrics.csv", index=False)
 
-    plot_degree_search(search)
+    plot_degree_search(ols_search, ridge_search)
     plot_oof_diagnostics(frames, oof_predictions)
 
-    print("Best screening configurations:")
-    print(search.groupby("problem", sort=False).head(5).to_string(index=False))
+    print("Best OLS screening configurations:")
+    print(ols_search.groupby("problem", sort=False).head(3).to_string(index=False))
+    print("\nBest Ridge screening configurations:")
+    print(ridge_search.groupby("problem", sort=False).head(5).to_string(index=False))
     print("\nRepeated cross-validation metrics for selected models:")
     print(metrics.to_string(index=False))
 

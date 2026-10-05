@@ -4,12 +4,12 @@ This repository contains the complete solution for both personalized polynomial-
 
 ## Final models
 
-| Problem | Features | Degree | Polynomial terms | Repeated 5-fold CV MSE | Repeated 5-fold CV R2 |
-|---|---|---:|---:|---:|---:|
-| var1 | x1, x2, x3, x4, x5, x6 | 4 | 209 | 0.7814 +/- 0.1174 | 0.9273 +/- 0.0134 |
-| var2 | x1, x2, x3 | 8 | 164 | 0.2574 +/- 0.0309 | 0.9938 +/- 0.0014 |
+| Problem | Features | Degree | Ridge alpha | Polynomial terms | Repeated 5-fold CV MSE | Repeated 5-fold CV R2 |
+|---|---|---:|---:|---:|---:|---:|
+| var1 | x1, x2, x3, x4, x5, x6 | 5 | 10 | 461 | 0.4378 +/- 0.0502 | 0.9593 +/- 0.0063 |
+| var2 | x1, x2, x3 | 12 | 1 | 454 | 0.2291 +/- 0.0251 | 0.9945 +/- 0.0013 |
 
-The models use `PolynomialFeatures`, followed by `StandardScaler` and ordinary least-squares `LinearRegression`. All preprocessing is inside a scikit-learn pipeline, so it is fitted independently within every cross-validation fold.
+The models use `PolynomialFeatures`, followed by `StandardScaler` and `Ridge`. Ridge adds L2 regularization to the polynomial coefficients. It improved five-fold CV MSE over the best ordinary least-squares baselines: 0.7725 to 0.4265 for var1 and 0.2544 to 0.2268 for var2. All preprocessing is inside a scikit-learn pipeline, so it is fitted independently within every cross-validation fold.
 
 ## Repository structure
 
@@ -43,14 +43,15 @@ Run from the repository root:
 python3 src/model_selection.py
 ```
 
-This performs exhaustive feature-subset screening with five-fold cross-validation. It searches up to the assignment limits of degree 10 for var1 and degree 20 for var2, while discarding configurations with more than 700 expanded polynomial terms. The selected models are then assessed with repeated five-fold cross-validation using five repeats. The script writes:
+This first performs exhaustive feature-subset screening with ordinary least squares and five-fold cross-validation. It searches up to the assignment limits of degree 10 for var1 and degree 20 for var2, discarding OLS configurations with more than 700 expanded polynomial terms. Both screens favored all available inputs. It then searches Ridge penalties and degrees on those full feature sets: degrees 3-6 for var1 and 7-16 for var2. The selected models are assessed with repeated five-fold cross-validation using five repeats. The script writes:
 
-- `results/model_selection.csv`
+- `results/model_selection.csv` (OLS feature and degree screen)
+- `results/ridge_selection.csv` (Ridge degree and penalty screen)
 - `results/final_metrics.csv`
 - `plots/degree_selection.png`
 - `plots/oof_diagnostics.png`
 
-Configurations were excluded once their polynomial expansion exceeded 700 terms. A five-fold training split contains 800 observations, so larger expansions approach or exceed the number of available fitting observations and become poorly determined.
+The 700-term restriction applies only to the OLS screen. Ridge can fit larger expansions because its penalty stabilizes the coefficients. The reported validation scores estimate performance on unseen observations; the hidden test targets were unavailable.
 
 ## Generate predictions
 
@@ -70,5 +71,6 @@ Each prediction file contains exactly one column named `y`, has 1,000 rows, pres
 - Model selection uses training data only.
 - Test data is never used to tune the features or polynomial degree.
 - MSE is the primary selection metric and R2 is reported as a complementary metric.
+- Ridge degree and alpha were chosen by the same five-fold search; the fixed configurations were checked again using 25 repeated validation folds.
 - Scaling occurs after polynomial expansion and is learned inside each fold, preventing preprocessing leakage.
 - Fixed random seeds make the reported splits reproducible.

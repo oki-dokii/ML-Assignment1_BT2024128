@@ -17,7 +17,7 @@ def main() -> None:
         train = load_dataset(problem, "train")
         test = load_dataset(problem, "test")
         features = list(config["features"])
-        model = make_pipeline(config["degree"])
+        model = make_pipeline(config["degree"], config["alpha"])
         model.fit(train.loc[:, features], train["y"])
         predictions = model.predict(test.loc[:, features])
 
@@ -30,7 +30,7 @@ def main() -> None:
         pd.DataFrame({"y": predictions}).to_csv(output_path, index=False)
         joblib.dump(model, models_dir / f"{ROLL_NUMBER}_{problem}_polynomial_model.joblib")
         print(
-            f"{problem}: degree={config['degree']}, features={features}, "
+            f"{problem}: degree={config['degree']}, alpha={config['alpha']}, features={features}, "
             f"rows={len(predictions)}, min={predictions.min():.6f}, "
             f"max={predictions.max():.6f}, output={output_path}"
         )
