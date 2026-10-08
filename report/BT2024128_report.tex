@@ -8,6 +8,7 @@
 \usepackage{hyperref}
 \usepackage{microtype}
 \usepackage{enumitem}
+\usepackage{tikz}
 
 \definecolor{navy}{HTML}{1F4E79}
 \definecolor{lightblue}{HTML}{EAF2F8}
@@ -35,6 +36,7 @@
 \textbf{Problems:} & Steam turbine optimization (var1), thermal reservoir mapping (var2) \\
 \textbf{Primary metrics:} & Mean Squared Error (MSE), coefficient of determination ($R^2$)
 \end{tabular}
+\par\vspace{5pt}{\small\textbf{GitHub repository:} \url{https://github.com/oki-dokii/ML-Assignment1_BT2024128}}
 \end{center}
 
 \section*{Abstract}
@@ -157,6 +159,50 @@ For var2, out-of-fold predictions lie close to the identity line over the observ
 
 \section{Final training and test inference}
 After selection, each pipeline was refitted on all 1,000 observations from its training dataset. Predictions were generated in the original test-row order. The final output ranges were $-10.1324$ to $16.6722$ for var1 and $-29.7657$ to $38.7586$ for var2. Both submission files follow the provided sample: exactly 1,000 finite predictions in a single column named \texttt{y}, with no exported row index.
+
+\clearpage
+\section{Validation plots}
+\thispagestyle{fancy}
+The bars compare five-fold validation MSE; shorter bars are better. They show why the final model for each dataset was chosen. The full degree-search and residual-diagnostic plots are also saved in the GitHub repository.
+
+\begin{center}
+\begin{tikzpicture}[x=7cm,y=1.1cm,font=\small]
+\foreach \x/\label in {0/0,0.2/0.2,0.4/0.4,0.6/0.6,0.8/0.8} {
+  \draw[gray!30] (\x,0)--(\x,3.7);
+  \node[below] at (\x,0) {\label};
+}
+\fill[navy!55] (0,2.9) rectangle (0.7725,3.35);
+\fill[navy!70] (0,1.9) rectangle (0.4265,2.35);
+\fill[ForestGreen!70] (0,0.9) rectangle (0.3082,1.35);
+\node[anchor=east] at (0,3.12) {OLS, degree 4};
+\node[anchor=east] at (0,2.12) {Ridge, degree 5};
+\node[anchor=east] at (0,1.12) {Lasso + Ridge, degree 5};
+\node[anchor=west] at (0.7725,3.12) {0.7725};
+\node[anchor=west] at (0.4265,2.12) {0.4265};
+\node[anchor=west] at (0.3082,1.12) {0.3082};
+\node at (0.4,-1.0) {Five-fold CV MSE};
+\end{tikzpicture}\\[2pt]
+{\small\textbf{Figure 1.} var1: Lasso term selection followed by Ridge reduces validation error.}
+\end{center}
+
+For var2, the selected degree-12 Ridge model also improves on the best OLS baseline. Lasso selection was tested but did not further reduce error on this dataset.
+
+\begin{center}
+\begin{tikzpicture}[x=19cm,y=1.1cm,font=\small]
+\foreach \x/\label in {0/0,0.1/0.1,0.2/0.2,0.3/0.3} {
+  \draw[gray!30] (\x,0)--(\x,2.7);
+  \node[below] at (\x,0) {\label};
+}
+\fill[navy!55] (0,1.9) rectangle (0.2544,2.35);
+\fill[ForestGreen!70] (0,0.9) rectangle (0.2268,1.35);
+\node[anchor=east] at (0,2.12) {OLS, degree 8};
+\node[anchor=east] at (0,1.12) {Ridge, degree 12};
+\node[anchor=west] at (0.2544,2.12) {0.2544};
+\node[anchor=west] at (0.2268,1.12) {0.2268};
+\node at (0.15,-1.0) {Five-fold CV MSE};
+\end{tikzpicture}\\[2pt]
+{\small\textbf{Figure 2.} var2: degree-12 Ridge improves on ordinary least squares.}
+\end{center}
 
 \clearpage
 \section{Reproducibility and safeguards}
