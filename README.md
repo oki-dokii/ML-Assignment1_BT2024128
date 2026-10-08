@@ -4,12 +4,12 @@ This repository contains the complete solution for both personalized polynomial-
 
 ## Final models
 
-| Problem | Features | Degree | Ridge alpha | Polynomial terms | Repeated 5-fold CV MSE | Repeated 5-fold CV R2 |
-|---|---|---:|---:|---:|---:|---:|
-| var1 | x1, x2, x3, x4, x5, x6 | 5 | 10 | 461 | 0.4378 +/- 0.0502 | 0.9593 +/- 0.0063 |
-| var2 | x1, x2, x3 | 12 | 1 | 454 | 0.2291 +/- 0.0251 | 0.9945 +/- 0.0013 |
+| Problem | Final pipeline | Features | Degree | Lasso alpha | Ridge alpha | Terms retained | Repeated 5-fold CV MSE | Repeated 5-fold CV R2 |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| var1 | Polynomial, scale, Lasso selection, Ridge | x1, x2, x3, x4, x5, x6 | 5 | 0.03 | 0.1 | 69 of 461 | 0.2975 +/- 0.0296 | 0.9724 +/- 0.0036 |
+| var2 | Polynomial, scale, Ridge | x1, x2, x3 | 12 | - | 1 | 454 | 0.2291 +/- 0.0251 | 0.9945 +/- 0.0013 |
 
-The models use `PolynomialFeatures`, followed by `StandardScaler` and `Ridge`. Ridge adds L2 regularization to the polynomial coefficients. It improved five-fold CV MSE over the best ordinary least-squares baselines: 0.7725 to 0.4265 for var1 and 0.2544 to 0.2268 for var2. All preprocessing is inside a scikit-learn pipeline, so it is fitted independently within every cross-validation fold.
+For var1, Lasso selects polynomial terms before Ridge refits their coefficients. This reduced five-fold CV MSE from 0.4265 for the earlier Ridge-only model to 0.3082. An inner-three-fold/outer-five-fold nested search gave MSE 0.3086. Lasso selection did not improve var2 in the completed comparisons, so its final model remains Ridge-only. All preprocessing and feature selection are inside scikit-learn pipelines, so they are refitted independently within each validation fold.
 
 ## Repository structure
 
@@ -43,10 +43,12 @@ Run from the repository root:
 python3 src/model_selection.py
 ```
 
-This first performs exhaustive feature-subset screening with ordinary least squares and five-fold cross-validation. It searches up to the assignment limits of degree 10 for var1 and degree 20 for var2, discarding OLS configurations with more than 700 expanded polynomial terms. Both screens favored all available inputs. It then searches Ridge penalties and degrees on those full feature sets: degrees 3-6 for var1 and 7-16 for var2. The selected models are assessed with repeated five-fold cross-validation using five repeats. The script writes:
+This first performs exhaustive feature-subset screening with ordinary least squares and five-fold cross-validation. It searches up to the assignment limits of degree 10 for var1 and degree 20 for var2, discarding OLS configurations with more than 700 expanded polynomial terms. Both screens favored all available inputs. It then searches Ridge penalties and degrees on those full feature sets: degrees 3-6 for var1 and 7-16 for var2. For var1, it additionally searches Lasso term-selection strengths 0.003, 0.01 and 0.03, each followed by Ridge strengths 0.1, 1, 10 and 30 at degree 5. It checks this selection strategy with nested cross-validation. The final fixed models are also assessed with repeated five-fold cross-validation using five repeats. The script writes:
 
 - `results/model_selection.csv` (OLS feature and degree screen)
 - `results/ridge_selection.csv` (Ridge degree and penalty screen)
+- `results/lasso_ridge_selection.csv` (var1 Lasso-then-Ridge screen)
+- `results/lasso_nested_cv.csv` (var1 nested-validation folds)
 - `results/final_metrics.csv`
 - `plots/degree_selection.png`
 - `plots/oof_diagnostics.png`
@@ -71,6 +73,6 @@ Each prediction file contains exactly one column named `y`, has 1,000 rows, pres
 - Model selection uses training data only.
 - Test data is never used to tune the features or polynomial degree.
 - MSE is the primary selection metric and R2 is reported as a complementary metric.
-- Ridge degree and alpha were chosen by the same five-fold search; the fixed configurations were checked again using 25 repeated validation folds.
-- Scaling occurs after polynomial expansion and is learned inside each fold, preventing preprocessing leakage.
+- Degree and penalty strengths were chosen using five-fold validation; var1 Lasso/Ridge tuning was also checked with nested validation. The fixed configurations were checked again using 25 repeated validation folds.
+- Scaling occurs after polynomial expansion; Lasso selection, when used, is also learned inside each fold to prevent leakage.
 - Fixed random seeds make the reported splits reproducible.
