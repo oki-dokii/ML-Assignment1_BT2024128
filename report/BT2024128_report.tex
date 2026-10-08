@@ -9,6 +9,8 @@
 \usepackage{microtype}
 \usepackage{enumitem}
 \usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
 
 \definecolor{navy}{HTML}{1F4E79}
 \definecolor{lightblue}{HTML}{EAF2F8}
@@ -163,46 +165,51 @@ After selection, each pipeline was refitted on all 1,000 observations from its t
 \clearpage
 \section{Validation plots}
 \thispagestyle{fancy}
-The bars compare five-fold validation MSE; shorter bars are better. They show why the final model for each dataset was chosen. The full degree-search and residual-diagnostic plots are also saved in the GitHub repository.
+The curves show five-fold validation MSE over the degrees tested for each model family. Lower values are better. These plots make the selected degrees and the effect of regularization visible beyond the representative configurations in Table 1.
 
 \begin{center}
-\begin{tikzpicture}[x=7cm,y=1.1cm,font=\small]
-\foreach \x/\label in {0/0,0.2/0.2,0.4/0.4,0.6/0.6,0.8/0.8} {
-  \draw[gray!30] (\x,0)--(\x,3.7);
-  \node[below] at (\x,0) {\label};
-}
-\fill[navy!55] (0,2.9) rectangle (0.7725,3.35);
-\fill[navy!70] (0,1.9) rectangle (0.4265,2.35);
-\fill[ForestGreen!70] (0,0.9) rectangle (0.3082,1.35);
-\node[anchor=east] at (0,3.12) {OLS, degree 4};
-\node[anchor=east] at (0,2.12) {Ridge, degree 5};
-\node[anchor=east] at (0,1.12) {Lasso + Ridge, degree 5};
-\node[anchor=west] at (0.7725,3.12) {0.7725};
-\node[anchor=west] at (0.4265,2.12) {0.4265};
-\node[anchor=west] at (0.3082,1.12) {0.3082};
-\node at (0.4,-1.0) {Five-fold CV MSE};
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.90\linewidth,height=5.2cm,
+  xmin=2.8,xmax=6.2,ymin=0.25,ymax=1.12,
+  xtick={3,4,5,6},ytick={0.3,0.5,0.7,0.9,1.1},
+  xlabel={Polynomial degree},ylabel={Five-fold CV MSE},
+  grid=major,grid style={gray!20},
+  legend style={font=\scriptsize,at={(0.98,0.98)},anchor=north east},
+  tick label style={font=\small},label style={font=\small}
+]
+\addplot[navy,thick,mark=*] coordinates {(3,0.950467) (4,0.772522) (5,1.067110)};
+\addlegendentry{OLS}
+\addplot[ForestGreen!75!black,thick,mark=square*] coordinates {(3,0.947073) (4,0.696954) (5,0.426465) (6,0.533301)};
+\addlegendentry{Best Ridge alpha}
+\addplot[Red,only marks,mark=star,mark size=4pt] coordinates {(5,0.308238)};
+\addlegendentry{Lasso + Ridge}
+\end{axis}
 \end{tikzpicture}\\[2pt]
-{\small\textbf{Figure 1.} var1: Lasso term selection followed by Ridge reduces validation error.}
+{\small\textbf{Figure 1.} var1: degree-5 Lasso selection followed by Ridge has the lowest tested MSE.}
 \end{center}
 
-For var2, the selected degree-12 Ridge model also improves on the best OLS baseline. Lasso selection was tested but did not further reduce error on this dataset.
+For var2, the best Ridge penalty at each searched degree reaches its minimum at degree 12. Higher tested degrees do not improve the score.
 
 \begin{center}
-\begin{tikzpicture}[x=19cm,y=1.1cm,font=\small]
-\foreach \x/\label in {0/0,0.1/0.1,0.2/0.2,0.3/0.3} {
-  \draw[gray!30] (\x,0)--(\x,2.7);
-  \node[below] at (\x,0) {\label};
-}
-\fill[navy!55] (0,1.9) rectangle (0.2544,2.35);
-\fill[ForestGreen!70] (0,0.9) rectangle (0.2268,1.35);
-\node[anchor=east] at (0,2.12) {OLS, degree 8};
-\node[anchor=east] at (0,1.12) {Ridge, degree 12};
-\node[anchor=west] at (0.2544,2.12) {0.2544};
-\node[anchor=west] at (0.2268,1.12) {0.2268};
-\node at (0.15,-1.0) {Five-fold CV MSE};
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.90\linewidth,height=5.2cm,
+  xmin=6.7,xmax=16.3,ymin=0.21,ymax=0.39,
+  xtick={7,8,9,10,11,12,13,14,15,16},
+  ytick={0.22,0.26,0.30,0.34,0.38},
+  xlabel={Polynomial degree},ylabel={Five-fold CV MSE},
+  grid=major,grid style={gray!20},
+  tick label style={font=\small},label style={font=\small}
+]
+\addplot[navy,thick,mark=*] coordinates {(7,0.367143) (8,0.253263) (9,0.253801) (10,0.234636) (11,0.233177) (12,0.226847) (13,0.230725) (14,0.231299) (15,0.235823) (16,0.241969)};
+\addplot[Red,only marks,mark=star,mark size=4pt] coordinates {(12,0.226847)};
+\end{axis}
 \end{tikzpicture}\\[2pt]
-{\small\textbf{Figure 2.} var2: degree-12 Ridge improves on ordinary least squares.}
+{\small\textbf{Figure 2.} var2: degree-12 Ridge is the minimum within the searched range.}
 \end{center}
+
+Full-resolution \href{https://github.com/oki-dokii/ML-Assignment1_BT2024128/blob/main/plots/degree_selection.png}{degree-search} and \href{https://github.com/oki-dokii/ML-Assignment1_BT2024128/blob/main/plots/oof_diagnostics.png}{out-of-fold prediction and residual} plots can be viewed in the GitHub repository.
 
 \clearpage
 \section{Reproducibility and safeguards}
